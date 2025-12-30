@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Araba Runner - Boss Modlu (Enraged eklendi)</title>
+<style>
+  :root{ --bg:#0b1221; }
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;background:#000;}
+  #wrap{display:flex;align-items:center;justify-content:center;height:100%;padding:12px;box-sizing:border-box}
+  canvas{width:100%;max-width:480px;height:calc(100vh - 24px);background:#222;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.6);touch-action:none;display:block;position:relative;z-index:1}
+  .screen{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#fff;gap:12px;z-index:9999;background:transparent}
+  .hidden{display:none}
+  button{appearance:none;border:0;padding:10px 14px;border-radius:10px;background:#0af;color:#000;font-weight:700;cursor:pointer}
+  button[disabled]{opacity:0.45; background:#666; cursor:not-allowed;}
+  .btn-red{background:#f33;color:#fff}
+  #topRight{position:absolute;right:14px;top:14px;background:#0007;padding:8px 10px;border-radius:10px;border:1px solid #ffffff22;z-index:10000;color:#fff}
+  .list{width:90%;max-width:420px;background:rgba(255,255,255,0.03);padding:12px;border-radius:10px;box-sizing:border-box;overflow:auto;max-height:50vh}
+  .row{display:flex;justify-content:space-between;align-items:center;padding:8px;border-radius:8px;margin-bottom:8px;background:rgba(0,0,0,0.12)}
+  input[type="range"]{width:220px}
+  #bossBarWrap{ position:absolute; left:50%; transform:translateX(-50%); top:8px; width:66%; height:18px; background:#0008; border-radius:10px; display:none; z-index:11000; align-items:center; padding:3px; box-sizing:border-box; }
+  #bossBar{ height:100%; background:linear-gradient(90deg,#e02020,#ff8a8a); width:100%; border-radius:8px;}
+  #bossLabel{ position:absolute; left:50%; transform:translateX(-50%); top:28px; color:#fff; font-weight:700; z-index:11001; display:none;}
+  .note{ font-size:13px; color:#ddd; text-align:center; max-width:320px; }
+</style>
+</head>
+<body>
+
+<div id="wrap">
+  <canvas id="c"></canvas>
+  <div id="topRight">Puan: <span id="coins">0</span></div>
+</div>
+
+<!-- MAIN MENU -->
+<div id="menu" class="screen">
+  <h1 style="margin:0">ARABA RUNNER</h1>
+  <div>En iyi skor: <span id="best">0</span></div>
+  <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;justify-content:center">
+    <button onclick="openDifficulty()">Oyuna Başla</button>
+    <button onclick="openShop()">Dükkan</button>
+    <button onclick="openGarage()">Garaj</button>
+    <button onclick="openTuning()">Modifiye</button>
+    <button id="bossModeBtn" onclick="openBossMode()" title="Boss Modu kilitli">BOSS MODU</button>
+  </div>
+  <div style="margin-top:8px">Seçili araba: <span id="selLabel">-</span></div>
+  <div class="note">Not: Boss Modu kilitli. Bir kez oyun içinde 3000 puan yaptığında kalıcı açılır.</div>
+</div>
+
+<!-- DIFFICULTY -->
+<div id="difficultyMenu" class="screen hidden">
+  <h2>Zorluk Seç</h2>
+  <div style="display:flex;gap:8px">
+    <button onclick="selectDifficulty('easy')">Kolay</button>
+    <button onclick="selectDifficulty('normal')">Orta</button>
+    <button onclick="selectDifficulty('hard')">Zor</button>
+  </div>
+  <div style="margin-top:12px"><button class="btn-red" onclick="backToMenuFromDifficulty()">Geri</button></div>
+</div>
+
+<!-- SHOP -->
+<div id="shop" class="screen hidden">
+  <h2>DÜKKAN</h2>
+  <div style="margin-bottom:8px">Puanın: <span id="shopCoins">0</span></div>
+  <div class="list" id="shopList"></div>
+  <div style="margin-top:8px"><button onclick="closeShop()">Geri</button></div>
+</div>
+
+<!-- GARAGE -->
+<div id="garage" class="screen hidden">
+  <h2>GARAJ</h2>
+  <div class="list" id="garageList"></div>
+  <div style="margin-top:8px"><button onclick="closeGarage()">Geri</button></div>
+</div>
+
+<!-- TUNING -->
+<div id="tuning" class="screen hidden">
+  <h2>Modifiye - Hareket Hızı</h2>
+  <div style="text-align:center">
+    <div style="margin-bottom:6px">Sağa/Sola Hareket Hızı: <strong id="speedLabel">6</strong></div>
+    <div style="display:flex;gap:8px;align-items:center;justify-content:center">
+      <button onclick="changePlayerSpeed(-0.5)">-</button>
+      <input id="speedSlider" type="range" min="2" max="12" step="0.5" />
+      <button onclick="changePlayerSpeed(0.5)">+</button>
+    </div>
+    <div style="margin-top:10px;font-size:13px;color:#ddd">Not: Bu sadece sağ/sol hızını değiştirir.</div>
+  </div>
+  <div style="margin-top:12px"><button class="btn-red" onclick="closeTuning()">Geri</button></div>
+</div>
+
+<!-- GAME OVER -->
+<div id="gameOver" class="screen hidden">
+  <h2>Oyun Bitti</h2>
+  <div>Skor: <span id="finalScore">0</span></div>
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <button onclick="restart()">Tekrar Oyna</button>
+    <button class="btn-red" onclick="backToMenu()">Menü</button>
+  </div>
+</div>
+
+<!-- Boss UI -->
+<div id="bossBarWrap"><div id="bossBar"></div></div>
+<div id="bossLabel">BOSS</div>
+
+<script>
+/* -------------------- Setup -------------------- */
+const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+let DPR = Math.max(1, window.devicePixelRatio || 1);
+function resize(){
+  const rectW = Math.min(window.innerWidth - 24, 480);
+  canvas.style.width = rectW + 'px';
+  canvas.style.height = Math.floor(rectW * (600/400)) + 'px';
+  canvas.width = Math.floor(rectW * DPR);
+  canvas.height = Math.floor((rectW * (600/400)) * DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* -------------------- Persistent data -------------------- */
+let best = Number(localStorage.getItem('best') || 0);
+let coins = Number(localStorage.getItem('coins') || 0);
+let owned = JSON.parse(localStorage.getItem('owned') || '["cyan"]');
+let selected = localStorage.getItem('selected') || 'cyan';
+let storedSpeed = Number(localStorage.getItem('playerSpeed')) || 6;
+let bossUnlocked = localStorage.getItem('bossUnlocked') === '1'; // permanent unlock flag
+
+document.getElementById('best').innerText = best;
+document.getElementById('coins').innerText = coins;
+document.getElementById('selLabel').innerText = selected.toUpperCase();
+updateBossButton();
+
+/* -------------------- Game vars -------------------- */
+let difficulty = 'normal';
+let running = false;
+let gameScore = 0;
+let player = { x: (canvas.width/DPR)/2 - 22, y: (canvas.height/DPR) - 140, w:44, h:30, speed: storedSpeed };
+let obstacles = [], lasers = [], orbs = [], particles = [];
+let spawnTimer = 0, spawnInterval = 0.9;
+let lastTime = performance.now();
+
+/* -------------------- Boss vars -------------------- */
+const BOSS_HP = 1000; // user chose 1000
+let bossActive = false;
+let boss = { x:0, y:60, w:200, h:100, dir:1, speed:80, hp:BOSS_HP, maxHp:BOSS_HP, enraged:false };
+const bossModeScoreThreshold = 3000;
+const orbSpawnEvery = 250; // user chose 250
+let lastOrbScore = 0;
+let shaking = 0;
+
+/* New variables to control heavy-laser single-instance behavior */
+let bossLaserActive = false; // ensures only one heavy-laser attack at a time
+let bossLaserCooldown = 1200; // base cooldown (ms) between heavy lasers
+
+/* -------------------- Shop Data -------------------- */
+const shopItems = [
+  {id:'red', label:'Kırmızı Araba', price:200},
+  {id:'green', label:'Yeşil Araba', price:300}
+];
+
+/* -------------------- Input -------------------- */
+let isTouching=false, touchSide=null;
+window.addEventListener('touchstart', e=>{
+  isTouching = true;
+  const x = e.touches[0].clientX;
+  touchSide = (x < window.innerWidth/2) ? 'left' : 'right';
+}, {passive:true});
+window.addEventListener('touchmove', e=>{
+  const x = e.touches[0].clientX;
+  touchSide = (x < window.innerWidth/2) ? 'left' : 'right';
+}, {passive:true});
+window.addEventListener('touchend', ()=>{ isTouching=false; touchSide=null; }, {passive:true});
+window.addEventListener('mousedown', e=>{ isTouching=true; touchSide = (e.clientX < window.innerWidth/2) ? 'left' : 'right'; });
+window.addEventListener('mousemove', e=>{ if(isTouching) touchSide = (e.clientX < window.innerWidth/2) ? 'left' : 'right'; });
+window.addEventListener('mouseup', ()=>{ isTouching=false; touchSide=null; });
+
+/* -------------------- Helpers -------------------- */
+function rand(a,b){ return Math.random()*(b-a)+a; }
+function rects(a,b){ return !(a.x + a.w < b.x || a.x > b.x + b.w || a.y + a.h < b.y || a.y > b.y + b.h); }
+function setCanvasInteractive(on){ canvas.style.pointerEvents = on ? 'auto' : 'none'; }
+setCanvasInteractive(false); // menus visible at start
+
+/* -------------------- UI: Boss button -------------------- */
+function updateBossButton(){
+  const btn = document.getElementById('bossModeBtn');
+  if(bossUnlocked){
+    btn.disabled = false;
+    btn.title = "Boss Modu açık - Boss arena için başlat";
+    btn.style.background = "#ff8a00";
+  } else {
+    btn.disabled = true;
+    btn.title = "Boss Modu kilitli - Önce 3000 puan yapmalısın";
+    btn.style.background = "#666";
+  }
+}
+
+/* -------------------- Spawning / orbs -------------------- */
+function spawnObstacle(){
+  const w = rand(24,64);
+  const x = rand(10, (canvas.width/DPR) - w - 10);
+  const speed = difficulty === 'easy' ? 90 : difficulty === 'hard' ? 180 : 120;
+  obstacles.push({ x, y:-80, w, h:rand(20,48), speed, type:'box' });
+  if(difficulty === 'hard'){
+    setTimeout(()=>{ lasers.push({ x:x + w/2 - 3, y:-30, w:6, h:20, speed:240 }); }, 420 + Math.random()*400);
+  }
+}
+
+function trySpawnOrb(){
+  if(!bossActive) return;
+  if(gameScore - lastOrbScore >= orbSpawnEvery){
+    lastOrbScore = gameScore;
+    const r = 14;
+    const x = rand(10, (canvas.width/DPR) - r - 10);
+    orbs.push({ x, y:-40, r, speed: 140 });
+  }
+}
+
+/* -------------------- Boss behavior (UPDATED with Enraged & single heavy-laser) -------------------- */
+
+function startBossFight(){
+  // start boss with full HP
+  bossActive = true;
+  boss.hp = boss.maxHp = BOSS_HP;
+  boss.enraged = false;
+  boss.x = (canvas.width/DPR)/2 - boss.w/2;
+  boss.y = 60;
+  boss.dir = Math.random() < 0.5 ? -1 : 1;
+  lastOrbScore = 0;
+  bossLaserActive = false;
+  document.getElementById('bossBarWrap').style.display = 'flex';
+  document.getElementById('bossLabel').style.display = 'block';
+  updateBossBar();
+}
+
+function spawnBossHeavyLaser(targetX= null, width=12, speed=220){
+  // ensures only one heavy-laser instance at a time
+  if(bossLaserActive) return false;
+  bossLaserActive = true;
+  const x = (typeof targetX === 'number') ? targetX - width/2 : (boss.x + boss.w/2 - width/2);
+  lasers.push({ x: x, y: boss.y + boss.h, w: width, h: 28, speed: speed, vx: 0, heavy: true });
+  // cooldown before another heavy laser allowed (adjusted if enraged)
+  const cooldown = boss.enraged ? 1200 : 1800;
+  setTimeout(()=>{ bossLaserActive = false; }, cooldown);
+  return true;
+}
+
+function updateBoss(dt){
+  if(!bossActive) return;
+  const W = canvas.width/DPR;
+
+  // Check enraged state
+  if(!boss.enraged && boss.hp <= boss.maxHp * 0.5){
+    boss.enraged = true;
+    // immediate small buff
+    boss.speed *= 1.3;
+  }
+
+  // Zigzag flips
+  if(Math.random() < (boss.enraged ? 0.035 : 0.015)) boss.dir *= -1;
+
+  // speed bursts (more frequent if enraged)
+  if(Math.random() < (boss.enraged ? 0.01 : 0.005)){
+    const old = boss.speed;
+    boss.speed *= boss.enraged ? 2.6 : 2.2;
+    setTimeout(()=> boss.speed = old, 400 + Math.random()*700);
+  }
+
+  // move
+  boss.x += boss.dir * boss.speed * dt;
+  if(boss.x < 10){ boss.x = 10; boss.dir = 1; }
+  if(boss.x + boss.w > W - 10){ boss.x = W - 10 - boss.w; boss.dir = -1; }
+
+  // Attack patterns:
+  // - If enraged: occasionally fire a single heavy laser aimed at player's current X (single at a time)
+  // - If normal: occasional salvo of smaller projectiles (these are allowed multiple) but heavy-laser still single-instance
+  if(boss.enraged){
+    // more aggressive: try to fire a heavy laser targeted to player, but only one heavy at a time
+    if(Math.random() < 0.025){
+      // try spawn heavy laser aimed at player center (makes it dodgeable)
+      spawnBossHeavyLaser(player.x + player.w/2, 14, 260);
+    }
+    // also spawn small tracking shots occasionally
+    if(Math.random() < 0.03){
+      const px = boss.x + boss.w * Math.random();
+      lasers.push({ x: px - 6, y: boss.y + boss.h, w:8, h:18, speed: 200, vx: (player.x + player.w/2 - px) * 0.45 });
+    }
+  } else {
+    // normal boss
+    if(Math.random() < 0.02){
+      // small volley / diagonal shots
+      const shots = 2 + Math.floor(Math.random()*3);
+      for(let i=0;i<shots;i++){
+        const px = boss.x + boss.w * (i+1)/(shots+1);
+        lasers.push({ x: px - 6, y: boss.y + boss.h, w:8, h:18, speed: 180, vx: (player.x + player.w/2 - px) * 0.35 });
+      }
+    }
+    // sometimes a non-targeted/heavy laser (rare)
+    if(Math.random() < 0.008){
+      spawnBossHeavyLaser(null, 10, 220);
+    }
+  }
+}
+
+/* -------------------- Boss bar update -------------------- */
+function updateBossBar(){
+  const wrap = document.getElementById('bossBarWrap');
+  if(!bossActive){ wrap.style.display = 'none'; document.getElementById('bossLabel').style.display = 'none'; return; }
+  wrap.style.display = 'flex';
+  const pct = Math.max(0, boss.hp / boss.maxHp) * 100;
+  document.getElementById('bossBar').style.width = pct + '%';
+}
+
+/* -------------------- Particles -------------------- */
+function spawnExplosion(x,y,count=40){
+  for(let i=0;i<count;i++){
+    particles.push({
+      x, y,
+      vx: rand(-300,300),
+      vy: rand(-300,0),
+      life: rand(0.4,1.2),
+      size: rand(2,6)
+    });
+  }
+}
+
+/* -------------------- Update / Draw -------------------- */
+function update(dt){
+  if(isTouching && touchSide){
+    if(touchSide === 'left') player.x -= player.speed * 2;
+    else player.x += player.speed * 2;
+  }
+  player.x = Math.max(8, Math.min((canvas.width/DPR) - player.w - 8, player.x));
+
+  // spawn obstacles
+  spawnTimer += dt;
+  if(spawnTimer > spawnInterval && !bossActive){ spawnTimer = 0; spawnObstacle(); }
+  else if(spawnTimer > spawnInterval && bossActive){ spawnTimer = 0; /* still spawn some obstacles if desired */ if(Math.random()<0.3) spawnObstacle(); }
+
+  // obstacles update
+  for(let i=obstacles.length-1;i>=0;i--){
+    const o = obstacles[i];
+    o.y += o.speed * dt;
+    if(o.y > (canvas.height/DPR) + 80) obstacles.splice(i,1);
+    if(rects(o, player)){ return gameOver(); }
+  }
+
+  // lasers update
+  for(let i=lasers.length-1;i>=0;i--){
+    const L = lasers[i];
+    // if L has vx, it moves sideways too
+    L.y += L.speed * dt;
+    if(L.vx) L.x += L.vx * dt;
+    if(L.y > (canvas.height/DPR) + 80){
+      // if heavy laser left screen, free heavy-laser lock
+      if(L.heavy) bossLaserActive = false;
+      lasers.splice(i,1);
+      continue;
+    }
+    if(rects(L, player)) return gameOver();
+  }
+
+  // orbs update
+  for(let i=orbs.length-1;i>=0;i--){
+    const ob = orbs[i];
+    ob.y += ob.speed * dt;
+    if(ob.y > (canvas.height/DPR) + 40) orbs.splice(i,1);
+    // collision
+    const px = player.x + player.w/2, py = player.y + player.h/2;
+    const ox = ob.x + ob.r/2, oy = ob.y + ob.r/2;
+    if(Math.hypot(ox - px, oy - py) < ob.r + Math.max(player.w, player.h)/2){
+      orbs.splice(i,1);
+      if(bossActive){
+        boss.hp = Math.max(0, boss.hp - 50); // orb does 50 dmg
+        updateBossBar();
+        spawnExplosion(ox, oy, 8);
+        if(boss.hp <= 0) { killBoss(); }
+      }
+    }
+  }
+
+  // boss update
+  if(bossActive) updateBoss(dt);
+
+  // particles
+  for(let i=particles.length-1;i>=0;i--){
+    const p = particles[i];
+    p.life -= dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 800 * dt;
+    if(p.life <= 0) particles.splice(i,1);
+  }
+
+  // score
+  gameScore += Math.round(60 * dt);
+
+  // orb spawn only when bossActive (we use orbSpawnEvery)
+  if(bossActive) trySpawnOrb();
+  else {
+    // check for unlocking boss permanently
+    if(!bossUnlocked && gameScore >= bossModeScoreThreshold){
+      bossUnlocked = true;
+      localStorage.setItem('bossUnlocked','1');
+      updateBossButton();
+      // notify player
+      alert('Tebrikler! 3000 puana ulaştın — Boss Modu artık kalıcı olarak açıldı. Menü → BOSS MODU ile direkt boss savaşına girebilirsin.');
+    }
+  }
+}
+
+function draw(){
+  const W = canvas.width/DPR, H = canvas.height/DPR;
+  const bIdx = Math.floor(gameScore / 800) % 3;
+  let sky1='#0b1b2b', sky2='#04121a', ground='#222', obsColor='#b33', laserColor='#ffd166';
+  if(bIdx === 1){ sky1='#ffd89b'; sky2='#ff7e5f'; ground='#7a5b2b'; obsColor='#b36b00'; laserColor='#fff1a8'; }
+  if(bIdx === 2){ sky1='#cfe9ff'; sky2='#9fd7ff'; ground='#cdd6e0'; obsColor='#8aa0b8'; laserColor='#ffeebb'; }
+
+  // shake (on explosions)
+  let shakeX = 0, shakeY = 0;
+  if(shaking > 0){ shakeX = (Math.random()-0.5) * shaking; shakeY = (Math.random()-0.5) * shaking; shaking = Math.max(0, shaking - 30 * (1/60)); }
+
+  ctx.save(); ctx.translate(shakeX, shakeY);
+
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0, sky1); g.addColorStop(1, sky2);
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+  ctx.fillStyle = ground; ctx.fillRect(0, H*0.65, W, H*0.35);
+
+  // orbs
+  for(const ob of orbs){
+    ctx.beginPath();
+    ctx.fillStyle = '#65f'; ctx.arc(ob.x + ob.r/2, ob.y + ob.r/2, ob.r, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.fillText('+', ob.x + ob.r/2 - 4, ob.y + ob.r/2 + 4);
+  }
+
+  // obstacles
+  ctx.fillStyle = obsColor;
+  for(const o of obstacles) ctx.fillRect(o.x, o.y, o.w, o.h);
+
+  // lasers
+  ctx.fillStyle = laserColor;
+  for(const L of lasers) ctx.fillRect(L.x, L.y, L.w, L.h);
+
+  // boss (change color if enraged)
+  if(bossActive){
+    ctx.fillStyle = boss.enraged ? '#aa0000' : '#770000';
+    ctx.fillRect(boss.x, boss.y, boss.w, boss.h);
+    ctx.fillStyle = '#ffcccc';
+    ctx.fillRect(boss.x + boss.w/2 - 12, boss.y + 18, 24, 10);
+  }
+
+  // player
+  ctx.fillStyle = selected;
+  ctx.fillRect(player.x, player.y, player.w, player.h);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(player.x + 6, player.y + player.h + 4, player.w - 12, 6);
+
+  // particles
+  for(const p of particles){ ctx.fillStyle = '#ffb86b'; ctx.fillRect(p.x, p.y, p.size, p.size); }
+
+  // UI
+  ctx.fillStyle = '#fff'; ctx.font = '18px Arial';
+  ctx.fillText('Skor: ' + gameScore, 12, 28);
+  ctx.fillText('Biom: ' + (bIdx===0?'Gece':bIdx===1?'Çöl':'Kar'), 12, 52);
+
+  ctx.restore();
+}
+
+/* -------------------- Boss kill -------------------- */
+function killBoss(){
+  spawnExplosion(boss.x + boss.w/2, boss.y + boss.h/2, 120);
+  shaking = 18;
+  // reward
+  coins += 1000; localStorage.setItem('coins', coins); document.getElementById('coins').innerText = coins;
+  bossActive = false;
+  updateBossBar();
+  obstacles = []; lasers = []; orbs = [];
+  // show victory: small overlay
+  setTimeout(()=> alert('BOSS YENDİN! +1000 puan'), 200);
+}
+
+/* -------------------- Main loop -------------------- */
+let last = performance.now();
+function loop(now){
+  const dt = Math.min(0.05, (now - last)/1000);
+  last = now;
+  if(running){
+    spawnInterval = difficulty === 'easy' ? 1.2 : difficulty === 'hard' ? 0.7 : 0.9;
+    update(dt);
+    draw();
+    updateBossBar();
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* -------------------- Game control -------------------- */
+function openDifficulty(){ hideAllScreens(); document.getElementById('difficultyMenu').classList.remove('hidden'); setCanvasInteractive(false); }
+function backToMenuFromDifficulty(){ document.getElementById('difficultyMenu').classList.add('hidden'); document.getElementById('menu').classList.remove('hidden'); }
+function selectDifficulty(d){ difficulty = d; document.getElementById('difficultyMenu').classList.add('hidden'); start(false); } // normal start (not boss mode)
+
+function start(asBossMode){
+  hideAllScreens();
+  running = true;
+  gameScore = 0; obstacles = []; lasers = []; orbs = []; particles = [];
+  spawnTimer = 0; bossActive = false; lastOrbScore = 0;
+  setCanvasInteractive(true);
+  player.x = (canvas.width/DPR)/2 - player.w/2;
+  last =
